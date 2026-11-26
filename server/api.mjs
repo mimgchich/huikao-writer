@@ -1,3 +1,18 @@
+import {
+  clearSessionCookie,
+  cookieToken,
+  createSession,
+  deleteAccount,
+  destroySession,
+  listAccounts,
+  loginAccount,
+  recordUse,
+  registerAccount,
+  resetAccountPassword,
+  sessionFromRequest,
+  setSessionCookie,
+  usageSummary,
+} from './accounts.mjs'
 import { buildExamples, buildGrade, buildKeySuggestions, buildRelation, shortGrade } from './demo.mjs'
 import { normalizeExamples, normalizeGrade, normalizeKeySuggestions, normalizeRelation } from './normalize.mjs'
 import { exampleSchema, examplesPrompt, gradePrompt, gradeSchema, keySentencePrompt, keySentenceSchema, relationPrompt, relationSchema } from './prompts.mjs'
@@ -436,6 +451,77 @@ export function attachApi(middlewares, env) {
     if (!url.pathname.startsWith('/api/')) return next()
 
     try {
+      if (req.method === 'GET' && url.pathname === '/api/auth/me') {
+        const session = sessionFromRequest(req)
+        if (!session) {
+          sendJson(res, 401, { error: '請先登入。' })
+          return
+        }
+        sendJson(res, 200, session)
+        return
+      }
+
+      if (url.pathname === '/api/auth/register' || url.pathname === '/api/auth/login') {
+        if (req.method !== 'POST') {
+          sendJson(res, 404, { error: '找不到這個功能。' })
+          return
+        }
+        const body = await readJson(req)
+        const user =
+          url.pathname === '/api/auth/register'
+            ? registerAccount(body.username, body.password, body.confirm)
+            : loginAccount(body.username, body.password)
+        setSessionCookie(req, res, createSession(user))
+        sendJson(res, 200, { username: user.username, admin: Boolean(user.admin) })
+        return
+      }
+
+      if (url.pathname === '/api/auth/logout') {
+        if (req.method !== 'POST') {
+          sendJson(res, 404, { error: '找不到這個功能。' })
+          return
+        }
+        destroySession(cookieToken(req))
+        clearSessionCookie(req, res)
+        sendJson(res, 200, { ok: true })
+        return
+      }
+
+      if (url.pathname.startsWith('/api/admin/')) {
+        const session = sessionFromRequest(req)
+        if (!session) {
+          sendJson(res, 401, { error: '請先登入。' })
+          return
+        }
+        if (!session.admin) {
+          sendJson(res, 403, { error: '只有管理員可以管理帳號。' })
+          return
+        }
+        if (req.method === 'GET' && url.pathname === '/api/admin/users') {
+          sendJson(res, 200, { users: listAccounts(session.username) })
+          return
+        }
+        if (req.method === 'POST' && (url.pathname === '/api/admin/password' || url.pathname === '/api/admin/delete')) {
+          const body = await readJson(req)
+          if (url.pathname === '/api/admin/password') resetAccountPassword(session.username, body.username, body.password)
+          else deleteAccount(session.username, body.username)
+          sendJson(res, 200, { ok: true })
+          return
+        }
+        sendJson(res, 404, { error: '找不到這個功能。' })
+        return
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/usage') {
+        const session = sessionFromRequest(req)
+        if (!session) {
+          sendJson(res, 401, { error: '請先登入。' })
+          return
+        }
+        sendJson(res, 200, usageSummary())
+        return
+      }
+
       if (req.method === 'GET' && url.pathname === '/api/health') {
         const auth = resolveAuth({}, env)
         sendJson(res, 200, {
@@ -451,21 +537,35 @@ export function attachApi(middlewares, env) {
         return
       }
 
+      const session = sessionFromRequest(req)
+      if (!session) {
+        sendJson(res, 401, { error: '請先登入。' })
+        return
+      }
+
       const body = await readJson(req)
       if (url.pathname === '/api/examples') {
-        sendJson(res, 200, await postExamples(body, env))
+        const result = await postExamples(body, env)
+        recordUse(session.username)
+        sendJson(res, 200, result)
         return
       }
       if (url.pathname === '/api/grade') {
-        sendJson(res, 200, await postGrade(body, env))
+        const result = await postGrade(body, env)
+        recordUse(session.username)
+        sendJson(res, 200, result)
         return
       }
       if (url.pathname === '/api/key-sentences') {
-        sendJson(res, 200, await postKeySentences(body, env))
+        const result = await postKeySentences(body, env)
+        recordUse(session.username)
+        sendJson(res, 200, result)
         return
       }
       if (url.pathname === '/api/relation') {
-        sendJson(res, 200, await postRelation(body, env))
+        const result = await postRelation(body, env)
+        recordUse(session.username)
+        sendJson(res, 200, result)
         return
       }
       if (url.pathname === '/api/ping') {

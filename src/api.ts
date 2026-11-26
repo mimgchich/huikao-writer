@@ -58,6 +58,56 @@ export function ping(settings: Settings) {
   return post<{ ok: boolean; error?: string; model?: string }>('/api/ping', authBody(settings))
 }
 
+export type SessionUser = { username: string; admin: boolean }
+
+export type AccountRow = { username: string; admin: boolean; createdAt: string; uses: number }
+
+export function registerAccount(username: string, password: string, confirm: string) {
+  return post<SessionUser>('/api/auth/register', { username, password, confirm })
+}
+
+export function loginAccount(username: string, password: string) {
+  return post<SessionUser>('/api/auth/login', { username, password })
+}
+
+export async function currentUser(): Promise<SessionUser | null> {
+  try {
+    const response = await fetch('/api/auth/me')
+    if (!response.ok) return null
+    const data = (await response.json()) as { username?: string; admin?: boolean }
+    return data.username ? { username: data.username, admin: Boolean(data.admin) } : null
+  } catch {
+    return null
+  }
+}
+
+export function listAccounts() {
+  return fetch('/api/admin/users').then(async (response) => {
+    const data = (await response.json().catch(() => null)) as { error?: string; users?: AccountRow[] } | null
+    if (!response.ok) throw new ApiError(data?.error || '讀不到帳號名單。')
+    return data?.users || []
+  })
+}
+
+export function resetAccountPassword(username: string, password: string) {
+  return post<{ ok: boolean }>('/api/admin/password', { username, password })
+}
+
+export function deleteAccount(username: string) {
+  return post<{ ok: boolean }>('/api/admin/delete', { username })
+}
+
+export async function getUsage(): Promise<{ total: number }> {
+  const response = await fetch('/api/usage')
+  const data = (await response.json().catch(() => null)) as { error?: string; total?: number } | null
+  if (!response.ok) throw new ApiError(data?.error || '讀不到使用次數。')
+  return { total: Number(data?.total) || 0 }
+}
+
+export function logoutAccount() {
+  return post<{ ok: boolean }>('/api/auth/logout', {})
+}
+
 export async function getHealth(): Promise<Health> {
   try {
     const response = await fetch('/api/health')

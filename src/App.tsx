@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, generateExamples, getHealth, gradeEssay } from './api'
+import { AccountsPage } from './AccountsPage'
+import { AuthPage } from './AuthPage'
+import { ApiError, currentUser, generateExamples, getHealth, getUsage, gradeEssay, logoutAccount } from './api'
 import {
   ErrorNote,
   ExamplesView,
@@ -15,10 +17,12 @@ import { StructurePage } from './StructurePage'
 import { countChars } from './text'
 import type { Examples, Grade, Health, HistoryItem, Settings } from './types'
 
-type PageName = 'write' | 'structure'
+type PageName = 'write' | 'structure' | 'accounts'
 
 function pageFromHash(): PageName {
-  return location.hash === '#structure' ? 'structure' : 'write'
+  if (location.hash === '#structure') return 'structure'
+  if (location.hash === '#accounts') return 'accounts'
+  return 'write'
 }
 
 const SETTINGS_KEY = 'huikao-writer-settings'
@@ -77,6 +81,8 @@ function loadHistory(): HistoryItem[] {
 }
 
 export function App() {
+  const [user, setUser] = useState<{ username: string; admin: boolean } | null | undefined>(undefined)
+  const [usageTotal, setUsageTotal] = useState<number | null>(null)
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [health, setHealth] = useState<Health | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -107,6 +113,7 @@ export function App() {
     if (typeof draft.topic === 'string') setTopic(draft.topic)
     if (typeof draft.essay === 'string') setEssay(draft.essay)
     setHydrated(true)
+    currentUser().then(setUser)
     getHealth().then(setHealth)
     function onHash() {
       setPage(pageFromHash())
@@ -119,6 +126,19 @@ export function App() {
     if (!hydrated) return
     writeStorage(DRAFT_KEY, { topic, essay })
   }, [topic, essay, hydrated])
+
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    getUsage()
+      .then((usage) => {
+        if (!cancelled) setUsageTotal(usage.total)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [user, page])
 
   const selectedKeys = outline.paragraphs.map((item) => item.text.trim()).filter((text) => meaningfulLength(text) >= 4)
 
@@ -148,6 +168,7 @@ export function App() {
     try {
       const result = await generateExamples(nextTopic, selectedKeys, outline.thesis.trim(), settings)
       setExamples(result)
+      getUsage().then((usage) => setUsageTotal(usage.total)).catch(() => undefined)
     } catch (error) {
       setExampleError(error instanceof Error ? error.message : '產生範例失敗。')
       setExampleDetail(error instanceof ApiError ? error.detail || '' : '')
@@ -173,6 +194,7 @@ export function App() {
     try {
       const result = await gradeEssay(nextTopic, nextEssay, settings)
       setGrade(result)
+      getUsage().then((usage) => setUsageTotal(usage.total)).catch(() => undefined)
       const item: HistoryItem = { id: `${Date.now()}`, at: Date.now(), grade: result }
       const nextHistory = [item, ...history.filter((entry) => entry.grade.essaySnapshot !== result.essaySnapshot)].slice(0, 8)
       setHistory(nextHistory)
@@ -204,6 +226,21 @@ export function App() {
     writeStorage(SETTINGS_KEY, next)
   }
 
+  async function onLogout() {
+    await logoutAccount().catch(() => undefined)
+    setUser(null)
+  }
+
+  if (user === undefined) {
+    return (
+      <div className="page">
+        <p className="status">確認登入狀態…</p>
+      </div>
+    )
+  }
+
+  if (!user) return <AuthPage onLogin={setUser} />
+
   return (
     <div className="page">
       <a className="skip" href={page === 'structure' ? '#structure-map' : '#write'}>
@@ -220,14 +257,20 @@ export function App() {
             <p>
               {page === 'structure'
                 ? '先把題目、各段關鍵句和主旨排成心智圖，再回到作文練習寫全文。'
-                : '用國小中高年級的口氣，依每個關鍵句寫出通順，以及加上修詞技巧的兩篇。'}
+                : page === 'accounts'
+                  ? '查看已註冊的帳號，可以重設密碼或刪除。'
+                  : '用國小中高年級的口氣，依每個關鍵句寫出通順，以及加上修詞技巧的兩篇。'}
             </p>
           </div>
         </div>
         <div className="top-actions">
+          <p className="who">{user.username}</p>
           <p className={connected ? 'status live' : 'status demo'}>{statusText}</p>
           <button type="button" className="btn ghost" onClick={() => setSettingsOpen(true)}>
             設定金鑰
+          </button>
+          <button type="button" className="btn ghost" onClick={onLogout}>
+            登出
           </button>
         </div>
       </header>
@@ -247,10 +290,21 @@ export function App() {
         >
           作文結構
         </a>
+        {user.admin && (
+          <a
+            href="#accounts"
+            aria-current={page === 'accounts' ? 'page' : undefined}
+            onClick={() => setPage('accounts')}
+          >
+            帳號管理
+          </a>
+        )}
       </nav>
 
       <main>
-        {page === 'structure' ? (
+        {page === 'accounts' && user.admin ? (
+          <AccountsPage self={user.username} />
+        ) : page === 'structure' ? (
           <StructurePage
             topic={topic}
             onTopicChange={setTopic}
@@ -265,6 +319,8 @@ export function App() {
             title="題目"
             desc="範文用國小中高年級的口氣。開題先空四個字寫題目。通順和加上修詞技巧都按關鍵句分段，每段空兩個字，事件後寫感想。加上修詞技巧再加形容、誇飾、映襯、比喻。"
           />
+          <p className="usage-total">總使用次數：{usageTotal ?? '—'}</p>
+          <p className="fine">每次產生範例、評分、取得關鍵句或計算關係，就累計一次。</p>
           <form
             onSubmit={(event) => {
               event.preventDefault()

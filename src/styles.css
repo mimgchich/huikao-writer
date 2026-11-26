@@ -351,7 +351,53 @@ a { color: var(--indigo); }
   box-shadow: inset 3px 0 0 var(--indigo);
 }
 
+.gate-page { min-height: 100vh; display: grid; place-items: center; padding: 32px 0; }
+.gate {
+  width: min(440px, 100%);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  padding: 28px 24px 24px;
+}
+.gate .brand-mark { margin-bottom: 16px; }
+.gate h1 { font-size: 2.2rem; }
+.gate-lead { color: var(--soft); line-height: 1.7; margin-bottom: 16px; }
+.gate-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.gate-tabs button {
+  border: 1px solid var(--line);
+  background: #fffdf9;
+  border-radius: 999px;
+  padding: 8px 12px;
+}
+.gate-tabs button.on { background: var(--indigo); color: #fffaf3; border-color: transparent; }
+.gate form .btn.primary { width: 100%; margin-top: 4px; }
+.gate .error { color: var(--cinnabar); line-height: 1.6; margin-bottom: 10px; }
+.who { margin: 0; color: var(--soft); font-size: 0.92rem; }
+.account-table { display: grid; gap: 8px; margin-top: 8px; }
+.account-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 72px 72px minmax(140px, 1.1fr) minmax(220px, 1.6fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fffdf9;
+}
+.account-row.head { background: transparent; border: none; color: var(--soft); font-size: 0.88rem; padding-bottom: 0; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.account-actions input { width: 120px; padding: 8px 10px; }
+.usage-total {
+  margin: 0 0 4px;
+  font-family: "Noto Serif TC", serif;
+  font-size: 1.35rem;
+  color: var(--indigo);
+}
+.panel > .error { color: var(--cinnabar); margin-bottom: 10px; }
+
 @media (max-width: 800px) {
+  .account-row, .account-row.head { grid-template-columns: 1fr; }
   .mind-scroll { overflow: visible; }
   .mind-row { flex-direction: column; align-items: center; width: 100%; min-width: 0; padding-top: 0; }
   .mind-row::before, .node::before, .mind-add::before { display: none; }
