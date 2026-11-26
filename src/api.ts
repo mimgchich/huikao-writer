@@ -28,7 +28,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
       body: JSON.stringify(body),
     })
   } catch {
-    throw new ApiError('連不到本機伺服器。請確認練習室仍在執行。')
+    throw new ApiError('連不到伺服器。請稍後再試一次。')
   }
 
   const data = (await response.json().catch(() => null)) as { error?: string; detail?: string } | null
